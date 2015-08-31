@@ -1,0 +1,75 @@
+#!/bin/bash
+
+# This file is part of fid (File ist da)
+# Copyright (C) 2015 Markus Falb <markus.falb@mafalb.at>
+#
+# fid is an acronym and stands for "File ist da". In English it would 
+# translate into "file is there".
+#
+# File ist da is a daemon which uses the Linux Kernels inotify mechanism
+# to get notified of file modification events in order to do something
+# with it, e.g. move it to another place.
+#
+# fid is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# fid is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with fid.  If not, see <http://www.gnu.org/licenses/>.
+
+function log() {
+	logger -t fidw[$$] ${1-'... message is missing, fix the code'}
+}
+
+log "$1 $2 $3 $4"
+
+src=${4}
+
+function get_user() {
+	username=$(echo $src|awk -F/ '{print $2}')
+}
+
+function user_exists() {
+	local username=$1	
+	if id $username; then
+		return 0
+	else
+		log "$(id $username)"
+		return 1
+	fi
+}
+
+function set_dst() {
+	dst=$(eval echo ~$username/Documents/$(echo $src|cut -d/ -f3-))
+}
+
+get_user
+
+if ! user_exists $username; then
+	log "$username is not a valid login, ignoring..."
+	exit 0
+fi
+
+set_dst
+
+log "src: $src"
+log "dst: $dst"
+
+if test ! -d $(dirname ${dst}); then
+	install -d -g ${username} -m 775 $(dirname ${dst})
+fi
+
+install -g ${username} -m 775 ${3}${4} ${dst}
+if test $? = 0; then
+	log "rm ${3}${4}"
+	rm ${3}${4} || log "error removing src"
+else
+    log "error copying $(readlink -f $3$4) to ${dst}"
+fi
+log "bye"

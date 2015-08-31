@@ -1,0 +1,145 @@
+#!/bin/bash
+
+# This file is part of fid (File ist da)
+# Copyright (C) 2015 Markus Falb <markus.falb@mafalb.at>
+#
+# fid is an acronym and stands for "File ist da". In English it would
+# translate into "file is there".
+#
+# File ist da is a daemon which uses the Linux Kernels inotify mechanism
+# to get notified of file modification events in order to do something
+# with it, e.g. move it to another place.
+# 
+# fid is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# fid is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with fid.  If not, see <http://www.gnu.org/licenses/>.
+
+function usage() {
+	cat >&2 <<USAGE
+fidd (file ist da), version 0.0, Copyright 2015 Markus Falb <markus.falb@mafalb.at>
+Usage: fidd [option] ...
+Options:
+	-d	daemonize, i.e. fork to the background and run as a daemon
+	-f	don't daemonize, i.e. run in the foreground
+		this is the default
+	-c	path to the config file
+		defaults to /etc/fid/config.yml
+USAGE
+}
+
+function log() {
+	logger -t fidd[$$] ${1-'... message is missing, fix the code'}
+
+	# if running in foreground do log to stderr also
+	if test $daemonize = 0; then
+		printf "fidd[%s]: %s\n" $$ "${1-'... message is missing, fix the code'}" >&2
+	fi
+}
+
+# parse command line options
+parse() {
+	while getopts :fdc: opt "$@"; do
+		case $opt in
+			f)	daemonize=0
+				;;
+			d)	daemonize=1
+				;;
+			c)	configfile="${OPTARG}"
+				;;
+			?)	usage
+				return 1
+		esac
+	done
+
+	# set defaults
+	user=${user-fid}
+	daemonize=${daemonize-0}
+	configfile=${configfile-'/etc/fid/fidd.cfg'}
+}
+
+if ! parse "$@" ; then
+	log 'command line options parse error'
+	exit 1
+fi
+
+canonical_pathname() {
+	readlink -f $1
+}
+
+# only fork when daemon is requested on command line
+if test $daemonize = 1; then
+	read pid sid < <(ps --no-headers -o pid,sid --pid=$$)
+	if test "$pid" != "$sid"; then
+		log "forking..."
+		log "my name is $0"
+		cd /
+		if test $UID = 0; then
+			sudo -n -b -u $user -- $(canonical_pathname $0) $@ &>/dev/null 0<&- &
+		else
+			exec setsid $(canonical_pathname $0) $@ &>/dev/null 0<&- &
+		fi
+    	exit $?
+	fi
+fi
+
+log "forked"
+trap show_childs SIGUSR1
+trap "kill -- -$$" EXIT
+
+# if something's going wrong...
+bark_at_the_moon() {
+	log 'fatal error'
+}
+
+show_childs ()
+{
+	pgrep -g $$ worker >&2
+}
+
+# read config
+if test -r "$configfile"; then
+	. $configfile
+fi
+
+no_of_childs=0
+watch=${watch%/}/
+
+run_worker() {
+	if test ! -x "$worker"; then
+		log "$worker is not executable"
+   	fi
+   	$worker $date $time ${watch} $dir$file &
+   	log "new child $! parent $$"
+	no_of_childs=$(( $no_of_childs + 1 ))
+}
+
+log "Entering loop for ${watch} ..."
+while read date time dir file; do
+	log "pid $$ has $no_of_childs childs 1"
+
+	# work with relative paths
+	dir=${dir#$watch}
+	dir="./""${dir}"
+
+	if test $no_of_childs -lt $max_workers; then
+		run_worker
+		log "pid $$ has $no_of_childs childs 2"
+	else
+		while test $no_of_childs -ge $max_workers; do
+			sleep 1
+			no_of_childs=$(pgrep -g $$ worker|wc -l)
+			log "after sleep pid $$ has $no_of_childs childs 3"
+		done
+		run_worker
+	fi
+	
+done < <(inotifywait -mr --timefmt '%d/%m/%y %H:%M' --format '%T %w %f' -e close_write "$watch")
