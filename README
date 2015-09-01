@@ -1,0 +1,8 @@
+fid - File ist da
+    
+fid is an acronym and stands for "File ist da". In English it would
+translate into "file is there".
+    
+File ist da is a daemon which uses the Linux Kernels inotify mechanism
+to get notified of file modification events in order to do something
+with it, e.g. move it to another place.
