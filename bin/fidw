@@ -3,7 +3,7 @@
 # This file is part of fid (File ist da)
 # Copyright (C) 2015 Markus Falb <markus.falb@mafalb.at>
 #
-# fid is an acronym and stands for "File ist da". In English it would 
+# fid is an acronym and stands for "File ist da". In English it would
 # translate into "file is there".
 #
 # File ist da is a daemon which uses the Linux Kernels inotify mechanism
@@ -37,7 +37,10 @@ function get_user() {
 
 function user_exists() {
 	local username=$1	
-	if id $username; then
+	if test -z "$username"; then
+		log "empty $username, something went wrong"
+		return 1
+	elif id $username; then
 		return 0
 	else
 		log "$(id $username)"
