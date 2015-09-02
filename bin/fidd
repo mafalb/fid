@@ -28,6 +28,7 @@ function usage() {
 fidd (file ist da), version 0.0, Copyright 2015 Markus Falb <markus.falb@mafalb.at>
 Usage: fidd [option] ...
 Options:
+	-b	work off any backlog before entering main loop
 	-d	daemonize, i.e. fork to the background and run as a daemon
 	-f	don't daemonize, i.e. run in the foreground
 		this is the default
@@ -47,8 +48,10 @@ function log() {
 
 # parse command line options
 parse() {
-	while getopts :fdc: opt "$@"; do
+	while getopts :bfdc: opt "$@"; do
 		case $opt in
+			b)	backlog=1
+				;;
 			f)	daemonize=0
 				;;
 			d)	daemonize=1
@@ -61,6 +64,7 @@ parse() {
 	done
 
 	# set defaults
+	backlog=${backlog-0}
 	user=${user-fid}
 	daemonize=${daemonize-0}
 	configfile=${configfile-'/etc/fid/fidd.cfg'}
@@ -122,9 +126,27 @@ run_worker() {
 	no_of_childs=$(( $no_of_childs + 1 ))
 }
 
+backlog() {
+	while read file; do
+        	file="./${file#$watch}"
+		log "backlog $file"
+        	run_worker
+	done < <(find $watch -type f)
+}
+
+backlog=$backlog
+now=$(date +'%d/%m/%y %H:%M')
+
 log "Entering loop for ${watch} ..."
 while read date time dir file; do
 	log "pid $$ has $no_of_childs childs 1"
+
+	if test 1 -eq $backlog; then
+		log 'Starting backlog...'
+		backlog
+		backlog=0
+		log 'backlog done.'
+        fi
 
 	# work with relative paths
 	dir=${dir#$watch}
@@ -142,4 +164,4 @@ while read date time dir file; do
 		run_worker
 	fi
 	
-done < <(inotifywait -mr --timefmt '%d/%m/%y %H:%M' --format '%T %w %f' -e close_write "$watch")
+done < <(printf "%s %s %s\n" "$now" '' ''; inotifywait -mr --timefmt '%d/%m/%y %H:%M' --format '%T %w %f' -e close_write "$watch")
