@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # This file is part of fid (File ist da)
-# Copyright (C) 2015 Markus Falb <markus.falb@mafalb.at>
+# Copyright (C) 2015,2016 Markus Falb <markus.falb@mafalb.at>
 #
 # fid is an acronym and stands for "File ist da". In English it would
 # translate into "file is there".
@@ -27,52 +27,19 @@ function log() {
 	logger -t fidw[$$] ${1-'... message is missing, fix the code'}
 }
 
-log "$1 $2 $3 $4"
+main () {
+	# argument handling
+	date=${1}
+	time=${2}
 
-src=${4}
+	pushd $(dirname "${3}/${4}")
+	src=$(pwd)/$(basename ${4})
+	popd
 
-function get_user() {
-	username=$(echo $src|awk -F/ '{print $2}')
+	log "Doing $src"
+
+	# include your custom code here
+	exit
 }
 
-function user_exists() {
-	local username=$1	
-	if test -z "$username"; then
-		log "empty $username, something went wrong"
-		return 1
-	elif id $username; then
-		return 0
-	else
-		log "$(id $username)"
-		return 1
-	fi
-}
-
-function set_dst() {
-	dst=$(eval echo ~$username/Documents/$(echo $src|cut -d/ -f3-))
-}
-
-get_user
-
-if ! user_exists $username; then
-	log "$username is not a valid login, ignoring..."
-	exit 0
-fi
-
-set_dst
-
-log "src: $src"
-log "dst: $dst"
-
-if test ! -d $(dirname ${dst}); then
-	install -d -g ${username} -m 775 $(dirname ${dst})
-fi
-
-install -g ${username} -m 775 ${3}${4} ${dst}
-if test $? = 0; then
-	log "rm ${3}${4}"
-	rm ${3}${4} || log "error removing src"
-else
-    log "error copying $(readlink -f $3$4) to ${dst}"
-fi
-log "bye"
+main "$@"
