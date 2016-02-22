@@ -164,4 +164,4 @@ while read date time dir file; do
 		run_worker
 	fi
 	
-done < <(printf "%s %s %s\n" "$now" '' ''; inotifywait -mr --timefmt '%d/%m/%y %H:%M' --format '%T %w %f' -e close_write "$watch")
+done < <(printf "%s %s %s\n" "$now" '' ''; inotifywait -mr --timefmt '%d/%m/%y %H:%M' --format '%T %w %f' -e close_write -e moved_to "$watch")
